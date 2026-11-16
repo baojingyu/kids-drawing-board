@@ -1,0 +1,648 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+<meta name="apple-mobile-web-app-capable" content="yes" />
+<meta name="mobile-web-app-capable" content="yes" />
+<meta name="theme-color" content="#fff6f9" />
+<title>小小画家 · 儿童涂鸦画板</title>
+<style>
+  :root{
+    --bg1:#fff6f9; --bg2:#eef6ff; --panel:#ffffff;
+    --ink:#3d2b45; --muted:#8a7f93; --accent:#ff4d6d;
+    --shadow: 0 10px 30px rgba(90,70,120,.14), 0 2px 8px rgba(90,70,120,.08);
+    --safe-b: env(safe-area-inset-bottom, 0px);
+  }
+  *{ box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
+  html,body{
+    margin:0; padding:0; height:100%; width:100%;
+    overflow:hidden; overscroll-behavior:none;
+    background: radial-gradient(1200px 800px at 20% 0%, var(--bg2), transparent 60%),
+                radial-gradient(1000px 700px at 90% 100%, #fff0f4, transparent 55%),
+                var(--bg1);
+    color:var(--ink);
+    font-family: "PingFang SC","Microsoft YaHei","Segoe UI",system-ui,-apple-system,sans-serif;
+    user-select:none; -webkit-user-select:none; touch-action:none;
+  }
+  #app{ position:fixed; inset:0; display:flex; flex-direction:column; }
+
+  /* ---- Stage ---- */
+  #stage{
+    position:relative; flex:1 1 auto; min-height:0; margin:10px 10px 0;
+    border-radius:22px; background:#ffffff; box-shadow:var(--shadow);
+    overflow:hidden; touch-action:none;
+  }
+  #board{ display:block; width:100%; height:100%; touch-action:none; cursor:crosshair; background:#ffffff; }
+  #brand{
+    position:absolute; top:10px; left:12px; z-index:5; pointer-events:none;
+    font-weight:800; font-size:15px; letter-spacing:.5px;
+    color:#7a5cff; background:rgba(255,255,255,.82); padding:6px 12px; border-radius:999px;
+    box-shadow:0 4px 14px rgba(120,90,200,.16); backdrop-filter:blur(6px);
+  }
+  #topActions{
+    position:absolute; top:10px; right:12px; z-index:6; display:flex; gap:8px;
+  }
+  .fab{
+    width:46px; height:46px; border-radius:16px; border:none; cursor:pointer;
+    background:rgba(255,255,255,.9); box-shadow:0 6px 16px rgba(120,90,200,.18);
+    font-size:21px; line-height:1; display:flex; align-items:center; justify-content:center;
+    color:var(--ink); transition:transform .08s ease, filter .15s ease; backdrop-filter:blur(6px);
+    touch-action:manipulation;
+  }
+  .fab:active{ transform:scale(.9); }
+  .fab[disabled]{ opacity:.35; filter:grayscale(.4); }
+
+  /* ---- Panel ---- */
+  #panel{
+    flex:0 0 auto; margin:10px; border-radius:22px; background:var(--panel);
+    box-shadow:var(--shadow); padding:10px 12px calc(10px + var(--safe-b));
+    display:flex; flex-direction:column; gap:9px;
+  }
+  .row{ display:flex; align-items:center; gap:8px; }
+  .tools{ gap:7px; flex-wrap:wrap; justify-content:flex-start; }
+  .tool{
+    flex:0 0 auto; width:52px; height:52px; border-radius:16px; border:2px solid #eee6f2;
+    background:#faf7fc; cursor:pointer; font-size:23px; display:flex; flex-direction:column;
+    align-items:center; justify-content:center; line-height:1; color:var(--ink);
+    transition:transform .07s ease, border-color .15s ease, background .15s ease;
+    touch-action:manipulation; position:relative;
+  }
+  .tool .tl{ font-size:9px; font-weight:700; color:var(--muted); margin-top:2px; letter-spacing:.5px; }
+  .tool:active{ transform:scale(.93); }
+  .tool.active{ border-color:var(--accent); background:#fff0f3; box-shadow:0 4px 14px rgba(255,77,109,.18); }
+  .tool.active .tl{ color:var(--accent); }
+
+  .stampbar{ display:none; gap:6px; flex-wrap:wrap; }
+  .stampbar.show{ display:flex; }
+  .stampbtn{
+    width:42px; height:42px; border-radius:12px; border:2px solid #eee6f2; background:#faf7fc;
+    cursor:pointer; font-size:22px; display:flex; align-items:center; justify-content:center;
+    touch-action:manipulation; transition:transform .07s ease, border-color .15s ease;
+  }
+  .stampbtn:active{ transform:scale(.9); }
+  .stampbtn.active{ border-color:var(--accent); background:#fff0f3; }
+
+  .colors{ gap:7px; flex-wrap:wrap; }
+  .sw{
+    width:34px; height:34px; border-radius:50%; border:2px solid rgba(0,0,0,.06);
+    cursor:pointer; padding:0; touch-action:manipulation;
+    transition:transform .07s ease, box-shadow .15s ease; position:relative;
+  }
+  .sw:active{ transform:scale(.9); }
+  .sw.active{ box-shadow:0 0 0 3px #fff, 0 0 0 6px var(--accent); }
+  .customwrap{
+    width:34px; height:34px; border-radius:50%; overflow:hidden; position:relative;
+    border:2px solid rgba(0,0,0,.08); background:conic-gradient(#ff4d6d,#ffd23f,#7bd389,#3ec1d3,#4d96ff,#9b5de5,#ff4d6d);
+    cursor:pointer; flex:0 0 auto;
+  }
+  .customwrap input{ position:absolute; inset:-6px; width:70px; height:70px; border:none; padding:0; background:transparent; cursor:pointer; opacity:0; }
+
+  .sizerow{ gap:12px; }
+  .sizerow .lbl{ font-size:12px; font-weight:700; color:var(--muted); white-space:nowrap; }
+  input[type=range]{
+    -webkit-appearance:none; appearance:none; flex:1 1 auto; height:22px; background:transparent; cursor:pointer; touch-action:manipulation;
+  }
+  input[type=range]::-webkit-slider-runnable-track{ height:10px; border-radius:999px; background:linear-gradient(90deg,#ffd6e0,#c9b6ff); }
+  input[type=range]::-webkit-slider-thumb{
+    -webkit-appearance:none; appearance:none; width:26px; height:26px; border-radius:50%;
+    background:#fff; border:3px solid var(--accent); margin-top:-8px; box-shadow:0 2px 8px rgba(255,77,109,.35);
+  }
+  input[type=range]::-moz-range-track{ height:10px; border-radius:999px; background:linear-gradient(90deg,#ffd6e0,#c9b6ff); }
+  input[type=range]::-moz-range-thumb{ width:24px; height:24px; border-radius:50%; background:#fff; border:3px solid var(--accent); }
+  #sizePreview{
+    flex:0 0 auto; width:40px; height:40px; border-radius:50%; background:#faf7fc; border:2px solid #eee6f2;
+    display:flex; align-items:center; justify-content:center;
+  }
+  #sizeDot{ border-radius:50%; background:var(--accent); width:10px; height:10px; }
+
+  /* ---- Toast ---- */
+  #toast{
+    position:fixed; left:50%; bottom:calc(24px + var(--safe-b)); transform:translateX(-50%) translateY(20px);
+    background:rgba(61,43,69,.94); color:#fff; padding:11px 18px; border-radius:999px; font-size:14px; font-weight:600;
+    opacity:0; pointer-events:none; transition:opacity .25s ease, transform .25s ease; z-index:50; max-width:86vw; text-align:center;
+  }
+  #toast.show{ opacity:1; transform:translateX(-50%) translateY(0); }
+
+  /* ---- Save overlay ---- */
+  #overlay{
+    position:fixed; inset:0; z-index:100; display:none; align-items:center; justify-content:center;
+    background:rgba(40,25,55,.55); backdrop-filter:blur(3px); padding:18px;
+  }
+  #overlay.show{ display:flex; }
+  .card{
+    background:#fff; border-radius:24px; padding:16px; max-width:min(92vw,640px); width:100%;
+    max-height:88vh; display:flex; flex-direction:column; gap:12px; box-shadow:0 20px 60px rgba(40,25,55,.4);
+  }
+  .card h2{ margin:2px 0 0; font-size:18px; text-align:center; color:var(--ink); }
+  .card .hint{ margin:0; font-size:12.5px; color:var(--muted); text-align:center; line-height:1.5; }
+  .card .imgwrap{ flex:1 1 auto; min-height:0; display:flex; align-items:center; justify-content:center; background:#f6f2fa; border-radius:16px; overflow:auto; padding:6px; }
+  .card img{ max-width:100%; max-height:56vh; border-radius:10px; box-shadow:0 6px 20px rgba(0,0,0,.12); -webkit-touch-callout:default; user-select:auto; }
+  .card .btns{ display:flex; gap:10px; }
+  .bigbtn{
+    flex:1 1 auto; border:none; border-radius:16px; padding:14px 16px; font-size:15px; font-weight:800; cursor:pointer;
+    background:#f2eef7; color:var(--ink); touch-action:manipulation; transition:transform .07s ease, filter .15s ease;
+  }
+  .bigbtn.primary{ background:linear-gradient(135deg,#ff6b8b,#ff4d6d); color:#fff; box-shadow:0 8px 20px rgba(255,77,109,.32); }
+  .bigbtn:active{ transform:scale(.97); }
+
+  @media (max-width:420px){
+    .tool{ width:48px; height:48px; font-size:21px; border-radius:14px; }
+    .sw{ width:30px; height:30px; }
+    #brand{ font-size:13px; }
+    .fab{ width:42px; height:42px; font-size:19px; }
+  }
+</style>
+</head>
+<body>
+<div id="app">
+  <div id="stage">
+    <canvas id="board"></canvas>
+    <div id="brand">🎨 小小画家</div>
+    <div id="topActions">
+      <button class="fab" id="undoBtn" title="撤销" aria-label="撤销">↩️</button>
+      <button class="fab" id="redoBtn" title="重做" aria-label="重做">↪️</button>
+      <button class="fab" id="clearBtn" title="清空" aria-label="清空">🗑️</button>
+      <button class="fab" id="saveBtn" title="保存" aria-label="保存作品">💾</button>
+    </div>
+  </div>
+
+  <div id="panel">
+    <div class="row tools" id="toolbar"></div>
+    <div class="row stampbar" id="stampbar"></div>
+    <div class="row colors" id="palette"></div>
+    <div class="row sizerow">
+      <span class="lbl">粗细</span>
+      <input type="range" id="size" min="2" max="48" value="10" step="1" />
+      <div id="sizePreview"><span id="sizeDot"></span></div>
+    </div>
+  </div>
+</div>
+
+<div id="toast"></div>
+
+<div id="overlay">
+  <div class="card">
+    <h2>作品完成啦 🎉</h2>
+    <p class="hint">点「下载图片」保存；手机上没有反应时，<b>长按上方图片</b>，选「存储到照片 / 保存图片」。</p>
+    <div class="imgwrap"><img id="previewImg" alt="我的作品" /></div>
+    <div class="btns">
+      <button class="bigbtn" id="closeOverlay">继续画</button>
+      <button class="bigbtn primary" id="downloadBtn">⬇️ 下载图片</button>
+    </div>
+  </div>
+</div>
+
+<script>
+(function(){
+  "use strict";
+
+  /* ============ Elements ============ */
+  const stage      = document.getElementById('stage');
+  const canvas     = document.getElementById('board');
+  const ctx        = canvas.getContext('2d');
+  const toolbarEl  = document.getElementById('toolbar');
+  const stampbarEl = document.getElementById('stampbar');
+  const paletteEl  = document.getElementById('palette');
+  const sizeInput  = document.getElementById('size');
+  const sizeDot    = document.getElementById('sizeDot');
+  const undoBtn    = document.getElementById('undoBtn');
+  const redoBtn    = document.getElementById('redoBtn');
+  const clearBtn   = document.getElementById('clearBtn');
+  const saveBtn    = document.getElementById('saveBtn');
+  const toastEl    = document.getElementById('toast');
+  const overlay    = document.getElementById('overlay');
+  const previewImg = document.getElementById('previewImg');
+  const closeOverlay = document.getElementById('closeOverlay');
+  const downloadBtn  = document.getElementById('downloadBtn');
+
+  /* ============ State ============ */
+  const TOOLS = [
+    { id:'crayon',  icon:'🖍️', label:'蜡笔' },
+    { id:'marker',  icon:'🖊️', label:'马克' },
+    { id:'spray',   icon:'💨', label:'喷枪' },
+    { id:'rainbow', icon:'🌈', label:'彩虹' },
+    { id:'stamp',   icon:'⭐', label:'印章' },
+    { id:'eraser',  icon:'🧽', label:'橡皮' }
+  ];
+  const COLORS = ['#ff4d6d','#ff8c42','#ffd23f','#7bd389','#2ec4b6','#3ec1d3',
+                  '#4d96ff','#9b5de5','#ff6fb5','#ff9f1c','#5a189a','#00a878',
+                  '#8d99ae','#000000'];
+  const STAMPS = ['⭐','❤️','😀','🌈','🦄','🌸','🚗','🐱','🍓','☀️','🎈','⚽'];
+
+  let tool     = 'crayon';
+  let color    = '#ff4d6d';
+  let stamp    = '⭐';
+  let size     = 10;
+  let drawing  = false;
+  let lastPt   = null;
+  let hue      = 0;
+
+  let dpr = 1;
+  let history = [];
+  let hi = -1;
+  const MAX_HISTORY = 30;
+
+  /* ============ Canvas sizing ============ */
+  function stageSize(){
+    const r = stage.getBoundingClientRect();
+    return { w: Math.max(1, Math.round(r.width)), h: Math.max(1, Math.round(r.height)) };
+  }
+  function copyCurrent(){
+    const c = document.createElement('canvas');
+    c.width = canvas.width; c.height = canvas.height;
+    if (canvas.width && canvas.height) c.getContext('2d').drawImage(canvas, 0, 0);
+    return c;
+  }
+  function resizeCanvas(){
+    const prev = copyCurrent();
+    const { w, h } = stageSize();
+    dpr = Math.min(window.devicePixelRatio || 1, 2.5);
+    canvas.width  = Math.round(w * dpr);
+    canvas.height = Math.round(h * dpr);
+    canvas.style.width  = w + 'px';
+    canvas.style.height = h + 'px';
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
+    // white paper
+    ctx.fillStyle = '#ffffff';
+    ctx.fillRect(0, 0, w, h);
+    if (prev.width && prev.height){
+      ctx.save();
+      ctx.setTransform(1, 0, 0, 1, 0, 0);
+      ctx.drawImage(prev, 0, 0, canvas.width, canvas.height);
+      ctx.restore();
+    }
+    history = []; hi = -1;
+    pushHistory();
+  }
+
+  /* ============ History ============ */
+  function pushHistory(){
+    const url = canvas.toDataURL('image/png');
+    if (hi < history.length - 1) history = history.slice(0, hi + 1);
+    history.push(url);
+    if (history.length > MAX_HISTORY) history.shift();
+    hi = history.length - 1;
+    updateButtons();
+  }
+  function restore(url){
+    return new Promise(function(resolve){
+      const img = new Image();
+      img.onload = function(){
+        ctx.save();
+        ctx.setTransform(1, 0, 0, 1, 0, 0);
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        ctx.drawImage(img, 0, 0);
+        ctx.restore();
+        resolve();
+      };
+      img.onerror = function(){ resolve(); };
+      img.src = url;
+    });
+  }
+  let busy = false;
+  async function undo(){
+    if (busy || hi <= 0) return;
+    busy = true; hi--; await restore(history[hi]); busy = false; updateButtons();
+  }
+  async function redo(){
+    if (busy || hi >= history.length - 1) return;
+    busy = true; hi++; await restore(history[hi]); busy = false; updateButtons();
+  }
+  function updateButtons(){
+    undoBtn.disabled = (hi <= 0);
+    redoBtn.disabled = (hi >= history.length - 1);
+  }
+
+  /* ============ Pointer helpers ============ */
+  function pointFrom(e){
+    const r = canvas.getBoundingClientRect();
+    let pressure = 1;
+    if (e.pointerType === 'pen'){
+      pressure = Math.max(0.15, Math.min(1, (e.pressure || 0.5)));
+    }
+    return { x: e.clientX - r.left, y: e.clientY - r.top, p: pressure };
+  }
+
+  /* ============ Drawing primitives ============ */
+  function brushWidth(pt){
+    const base = size * (0.55 + 0.65 * pt.p);
+    return Math.max(1, base);
+  }
+  function line(a, b, w, style, alpha){
+    ctx.save();
+    ctx.globalCompositeOperation = 'source-over';
+    ctx.globalAlpha = alpha;
+    ctx.strokeStyle = style;
+    ctx.lineWidth = w;
+    ctx.beginPath();
+    ctx.moveTo(a.x, a.y);
+    ctx.lineTo(b.x, b.y);
+    ctx.stroke();
+    ctx.restore();
+  }
+  function dot(pt, w, style, alpha){
+    ctx.save();
+    ctx.globalCompositeOperation = 'source-over';
+    ctx.globalAlpha = alpha;
+    ctx.fillStyle = style;
+    ctx.beginPath();
+    ctx.arc(pt.x, pt.y, Math.max(0.6, w / 2), 0, Math.PI * 2);
+    ctx.fill();
+    ctx.restore();
+  }
+  function crayonMark(a, b){
+    const w = brushWidth(b);
+    for (let i = 0; i < 4; i++){
+      const jx = (Math.random() - 0.5) * w * 0.7;
+      const jy = (Math.random() - 0.5) * w * 0.7;
+      line({x:a.x+jx, y:a.y+jy}, {x:b.x+jx, y:b.y+jy}, w * (0.55 + Math.random()*0.5), color, 0.5);
+    }
+  }
+  function sprayMark(pt, w){
+    const radius = Math.max(6, w * 1.15);
+    const n = Math.min(46, Math.max(10, Math.round(w * 1.6)));
+    ctx.save();
+    ctx.globalCompositeOperation = 'source-over';
+    ctx.fillStyle = color;
+    for (let i = 0; i < n; i++){
+      const ang = Math.random() * Math.PI * 2;
+      const rad = Math.random() * radius;
+      ctx.globalAlpha = 0.16 + Math.random() * 0.14;
+      ctx.beginPath();
+      ctx.arc(pt.x + Math.cos(ang)*rad, pt.y + Math.sin(ang)*rad, Math.max(0.5, w*0.10), 0, Math.PI*2);
+      ctx.fill();
+    }
+    ctx.restore();
+  }
+  function stampAt(pt){
+    const fs = Math.max(24, size * 3.4);
+    ctx.save();
+    ctx.globalCompositeOperation = 'source-over';
+    ctx.globalAlpha = 1;
+    ctx.font = fs + 'px "Apple Color Emoji","Segoe UI Emoji","Noto Color Emoji",sans-serif';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(stamp, pt.x, pt.y);
+    ctx.restore();
+  }
+  function drawSegment(a, b){
+    const dist = Math.hypot(b.x - a.x, b.y - a.y);
+    const w = brushWidth(b);
+    switch (tool){
+      case 'crayon':
+        if (dist < 0.6) crayonMark(b, {x:b.x+0.01, y:b.y+0.01});
+        else crayonMark(a, b);
+        break;
+      case 'marker':
+        if (dist < 0.6) dot(b, w * 1.9, color, 0.9);
+        else line(a, b, w * 1.9, color, 0.9);
+        break;
+      case 'spray':
+        sprayMark(b, w);
+        break;
+      case 'rainbow':
+        hue = (hue + 2.4) % 360;
+        if (dist < 0.6) dot(b, w, 'hsl(' + hue + ',92%,55%)', 1);
+        else line(a, b, w, 'hsl(' + hue + ',92%,55%)', 1);
+        break;
+      case 'eraser':
+        if (dist < 0.6) dot(b, w * 1.5, '#ffffff', 1);
+        else line(a, b, w * 1.5, '#ffffff', 1);
+        break;
+      default:
+        if (dist < 0.6) dot(b, w, color, 1);
+        else line(a, b, w, color, 1);
+    }
+  }
+
+  /* ============ Pointer events ============ */
+  function onDown(e){
+    if (e.pointerType === 'mouse' && e.button !== 0) return;
+    e.preventDefault();
+    const pt = pointFrom(e);
+    if (tool === 'stamp'){
+      stampAt(pt);
+      pushHistory();
+      return;
+    }
+    drawing = true;
+    lastPt = pt;
+    drawSegment(pt, pt);
+    try { canvas.setPointerCapture(e.pointerId); } catch(_){}
+  }
+  function onMove(e){
+    if (!drawing) return;
+    e.preventDefault();
+    const events = (e.getCoalescedEvents && e.getCoalescedEvents()) || [];
+    if (events.length){
+      for (const ev of events){
+        const pt = pointFrom(ev);
+        drawSegment(lastPt, pt);
+        lastPt = pt;
+      }
+    } else {
+      const pt = pointFrom(e);
+      drawSegment(lastPt, pt);
+      lastPt = pt;
+    }
+  }
+  function onUp(e){
+    if (!drawing) return;
+    drawing = false;
+    try { canvas.releasePointerCapture(e.pointerId); } catch(_){}
+    pushHistory();
+  }
+
+  canvas.addEventListener('pointerdown', onDown);
+  canvas.addEventListener('pointermove', onMove);
+  canvas.addEventListener('pointerup', onUp);
+  canvas.addEventListener('pointercancel', onUp);
+  window.addEventListener('pointerup', onUp);
+  canvas.addEventListener('contextmenu', function(e){ e.preventDefault(); });
+
+  /* ============ UI build ============ */
+  function buildToolbar(){
+    TOOLS.forEach(function(t){
+      const b = document.createElement('button');
+      b.className = 'tool' + (t.id === tool ? ' active' : '');
+      b.dataset.tool = t.id;
+      b.innerHTML = '<span>' + t.icon + '</span><span class="tl">' + t.label + '</span>';
+      b.addEventListener('click', function(){ selectTool(t.id); });
+      toolbarEl.appendChild(b);
+    });
+  }
+  function buildStamps(){
+    STAMPS.forEach(function(s){
+      const b = document.createElement('button');
+      b.className = 'stampbtn' + (s === stamp ? ' active' : '');
+      b.textContent = s;
+      b.addEventListener('click', function(){
+        stamp = s;
+        Array.from(stampbarEl.children).forEach(function(c){ c.classList.remove('active'); });
+        b.classList.add('active');
+      });
+      stampbarEl.appendChild(b);
+    });
+  }
+  function buildPalette(){
+    COLORS.forEach(function(c){
+      const b = document.createElement('button');
+      b.className = 'sw';
+      b.style.background = c;
+      b.dataset.color = c;
+      b.addEventListener('click', function(){ selectColor(c.toLowerCase()); });
+      paletteEl.appendChild(b);
+    });
+    const wrap = document.createElement('label');
+    wrap.className = 'customwrap';
+    wrap.title = '自定义颜色';
+    const inp = document.createElement('input');
+    inp.type = 'color';
+    inp.value = color;
+    inp.addEventListener('input', function(){ selectColor(inp.value); });
+    wrap.appendChild(inp);
+    paletteEl.appendChild(wrap);
+  }
+  function selectTool(id){
+    tool = id;
+    Array.from(toolbarEl.children).forEach(function(c){
+      c.classList.toggle('active', c.dataset.tool === id);
+    });
+    stampbarEl.classList.toggle('show', id === 'stamp');
+  }
+  function selectColor(c){
+    color = c;
+    Array.from(paletteEl.querySelectorAll('.sw')).forEach(function(s){
+      s.classList.toggle('active', s.dataset.color === c);
+    });
+  }
+  function updateSizePreview(){
+    const d = Math.max(4, Math.min(34, size * 0.7));
+    sizeDot.style.width = d + 'px';
+    sizeDot.style.height = d + 'px';
+    sizeDot.style.background = (tool === 'rainbow') ? 'linear-gradient(135deg,#ff4d6d,#ffd23f,#4d96ff)' : (tool === 'eraser' ? '#ffffff' : color);
+    sizeDot.style.border = (tool === 'eraser') ? '2px solid #ddd' : 'none';
+  }
+
+  sizeInput.addEventListener('input', function(){ size = parseInt(sizeInput.value, 10); updateSizePreview(); });
+  undoBtn.addEventListener('click', undo);
+  redoBtn.addEventListener('click', redo);
+  clearBtn.addEventListener('click', function(){
+    ctx.save();
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    ctx.fillStyle = '#ffffff';
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    ctx.restore();
+    pushHistory();
+    toast('画布已清空 ✨');
+  });
+
+  /* ============ Toast ============ */
+  let toastTimer = null;
+  function toast(msg){
+    toastEl.textContent = msg;
+    toastEl.classList.add('show');
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(function(){ toastEl.classList.remove('show'); }, 1900);
+  }
+
+  /* ============ Save ============ */
+  function fileName(){
+    const d = new Date();
+    const p = function(n){ return (n < 10 ? '0' : '') + n; };
+    return '我的画作_' + d.getFullYear() + p(d.getMonth()+1) + p(d.getDate()) + '_' + p(d.getHours()) + p(d.getMinutes()) + '.png';
+  }
+  function openOverlay(dataUrl, blobUrl){
+    previewImg.src = dataUrl;
+    previewImg.dataset.blob = blobUrl || '';
+    overlay.classList.add('show');
+  }
+  function dataURLToBlob(d){
+    const parts = d.split(',');
+    const mime = (parts[0].match(/:(.*?);/) || [null, 'image/png'])[1];
+    const bin = atob(parts[1]);
+    const arr = new Uint8Array(bin.length);
+    for (let i = 0; i < bin.length; i++) arr[i] = bin.charCodeAt(i);
+    return new Blob([arr], { type: mime });
+  }
+  // Synchronous up to the share() call so the tap gesture stays valid on iOS.
+  function doSave(){
+    const dataUrl = canvas.toDataURL('image/png');
+    let blob = null;
+    try { blob = dataURLToBlob(dataUrl); } catch(_){}
+    const blobUrl = blob ? URL.createObjectURL(blob) : '';
+
+    // 1) Phones: Web Share -> "存储图像 / 保存图片"
+    const isMobile = /Mobi|Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
+    if (isMobile && blob && navigator.canShare && navigator.share){
+      try {
+        const file = new File([blob], fileName(), { type: 'image/png' });
+        if (navigator.canShare({ files: [file] })){
+          navigator.share({ files: [file], title: '我的画作' }).then(function(){
+            toast('已打开分享，选择「存储图像」即可 💾');
+          }).catch(function(err){
+            if (err && err.name === 'AbortError') return; // user cancelled
+            openOverlay(dataUrl, blobUrl);
+          });
+          return;
+        }
+      } catch(_){ /* fall through */ }
+    }
+    // 2) Desktop / Android: anchor download
+    try {
+      const a = document.createElement('a');
+      a.href = blobUrl || dataUrl;
+      a.download = fileName();
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+    } catch(_){}
+    // 3) Overlay fallback (long-press to save)
+    openOverlay(dataUrl, blobUrl);
+  }
+
+  saveBtn.addEventListener('click', doSave);
+  closeOverlay.addEventListener('click', function(){ overlay.classList.remove('show'); });
+  overlay.addEventListener('click', function(e){ if (e.target === overlay) overlay.classList.remove('show'); });
+  downloadBtn.addEventListener('click', function(){
+    const dataUrl = previewImg.src;
+    const blobUrl = previewImg.dataset.blob;
+    try {
+      const a = document.createElement('a');
+      a.href = blobUrl || dataUrl;
+      a.download = fileName();
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      toast('开始下载 💾');
+    } catch(_){
+      toast('请长按上方图片保存');
+    }
+  });
+
+  /* ============ Init ============ */
+  buildToolbar();
+  buildStamps();
+  buildPalette();
+  selectColor(color);
+  selectTool(tool);
+  updateSizePreview();
+  resizeCanvas();
+
+  let rzTimer = null;
+  function onResize(){ clearTimeout(rzTimer); rzTimer = setTimeout(resizeCanvas, 120); }
+  window.addEventListener('resize', onResize);
+  window.addEventListener('orientationchange', function(){ setTimeout(resizeCanvas, 260); });
+
+  // prevent iOS gestures on stage
+  ['gesturestart','gesturechange','gestureend'].forEach(function(ev){
+    document.addEventListener(ev, function(e){ e.preventDefault(); }, { passive:false });
+  });
+  document.addEventListener('dblclick', function(e){ e.preventDefault(); }, { passive:false });
+})();
+</script>
+</body>
+</html>
